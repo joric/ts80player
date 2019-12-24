@@ -2,6 +2,10 @@
 
 Audio player for the TS80 soldering iron
 
+## Video
+
+[![](http://img.youtube.com/vi/aose7zWV1fM/0.jpg)](https://youtu.be/aose7zWV1fM)
+
 ## Player
 
 * Example: https://github.com/OBauck/stm32_wav_player
