@@ -5,7 +5,6 @@ Audio player for the TS80 soldering iron
 ## Player
 
 * Example: https://github.com/OBauck/stm32_wav_player
-
 * TIM1 works as DMA at 32000Hz (mono) 16-bit samples a second,
 * TIM2 fires every time when buffer is empty.
 * LD2 pin - analog audio
@@ -29,22 +28,19 @@ SDA     |  B7  |  B7
 
 ## Debugging
 
-You could use a cheap Bluepill board for TS80 firmware without risking money.
+You could use a cheap Bluepill board for debugging.
 Upload [TS80-Bootloader.hex](https://github.com/Ralim/ts100/blob/master/Development%20Resources/TS80-Bootloader.hex) to the Bluepill the usual way, via e.g. UART.
-Connect B1 to GND for the USB Mass Storage bootloader, use pins B6/B7 for I2C display. You can press reset instead of unplugging USB each time.
+Connect B1 to GND for the USB Mass Storage bootloader, use pins B6/B7 for I2C display.
 You can upload your own firmware in hex format (use 0x08004000 offset and 0x4000 start vector) and file extension will change to .RDY.
+You can press reset instead of unplugging USB each time.
 Stock TS80 firmware works as well.
-
-![](https://i.imgur.com/cUFFeRk.jpg)
 
 ![](https://i.imgur.com/KVUJhPQ.jpg)
 
 
 ## Building
 
-To build that you need STM32CubeF1. Put path to the unpacked archive into your Makefile:
-
-* https://github.com/STMicroelectronics/STM32CubeF1
+To build that you need [STM32CubeF1](https://github.com/STMicroelectronics/STM32CubeF1). Put path to the unpacked archive into your Makefile. Then just run make.
 
 ```
 FIRMWARE = /mnt/c/SDK/STM32CubeF1
@@ -63,8 +59,9 @@ FIRMWARE = /mnt/c/SDK/STM32CubeF1
 * https://github.com/Ralim/ts100/wiki/TS-80 (TS80 wiki)
 * https://github.com/joric/ts100tris
 * https://github.com/OBauck/stm32_wav_player
-
 * https://github.com/rogerclarkmelbourne/STM32duino-bootloader/tree/master/binaries
 * http://www.avislab.com/blog/stm32-bootloader_ru/
 * https://github.com/avislab/STM32F103/tree/master/Example_Bootloader/Example_Bootloader/Debug/bin
 * https://github.com/afiskon/stm32-ssd1306
+* https://github.com/STMicroelectronics/STM32CubeF1
+
