@@ -61,74 +61,19 @@ int errorcode = 0;
 /* Private variables ---------------------------------------------------------*/
 //SPI_HandleTypeDef hspi2;
 
-TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim2;
-DMA_HandleTypeDef hdma_tim1_ch1;
+DMA_HandleTypeDef hdma_tim3_ch1;
 
 UART_HandleTypeDef huart2;
 
-
 I2C_HandleTypeDef hi2c1;
-
-/* USER CODE BEGIN PV */
-/* Private variables ---------------------------------------------------------*/
-
-#define SIN_LOOKUP_TABLE_SIZE 360
-    
-const float sin_lookup_table[SIN_LOOKUP_TABLE_SIZE] = {
-    0.0,0.01745240643728351,0.03489949670250097,0.05233595624294383,0.0697564737441253,0.08715574274765817,0.10452846326765346,0.12186934340514748,0.13917310096006544,0.15643446504023087,
-    0.17364817766693033,0.1908089953765448,0.20791169081775931,0.224951054343865,0.24192189559966773,0.25881904510252074,0.27563735581699916,0.29237170472273677,0.3090169943749474,0.32556815445715664,
-    0.3420201433256687,0.35836794954530027,0.374606593415912,0.3907311284892737,0.40673664307580015,0.42261826174069944,0.4383711467890774,0.45399049973954675,0.4694715627858908,0.48480962024633706,
-    0.49999999999999994,0.5150380749100542,0.5299192642332049,0.5446390350150271,0.5591929034707469,0.573576436351046,0.5877852522924731,0.6018150231520483,0.6156614753256582,0.6293203910498374,
-    0.6427876096865393,0.6560590289905072,0.6691306063588582,0.6819983600624985,0.6946583704589973,0.7071067811865475,0.7193398003386511,0.7313537016191705,0.7431448254773941,0.754709580222772,
-    0.766044443118978,0.7771459614569708,0.788010753606722,0.7986355100472928,0.8090169943749475,0.8191520442889918,0.8290375725550417,0.8386705679454239,0.848048096156426,0.8571673007021122,
-    0.8660254037844386,0.8746197071393957,0.8829475928589269,0.8910065241883678,0.898794046299167,0.9063077870366499,0.9135454576426009,0.9205048534524403,0.9271838545667874,0.9335804264972017,
-    0.9396926207859083,0.9455185755993167,0.9510565162951535,0.9563047559630354,0.9612616959383189,0.9659258262890683,0.9702957262759965,0.9743700647852352,0.9781476007338056,0.981627183447664,
-    0.984807753012208,0.9876883405951378,0.9902680687415703,0.992546151641322,0.9945218953682733,0.9961946980917455,0.9975640502598242,0.9986295347545738,0.9993908270190958,0.9998476951563913,
-    1.0,0.9998476951563913,0.9993908270190958,0.9986295347545738,0.9975640502598242,0.9961946980917455,0.9945218953682734,0.9925461516413221,0.9902680687415704,0.9876883405951377,
-    0.984807753012208,0.981627183447664,0.9781476007338057,0.9743700647852352,0.9702957262759965,0.9659258262890683,0.9612616959383189,0.9563047559630355,0.9510565162951536,0.9455185755993168,
-    0.9396926207859084,0.9335804264972017,0.9271838545667874,0.9205048534524404,0.913545457642601,0.90630778703665,0.8987940462991669,0.8910065241883679,0.8829475928589271,0.8746197071393959,
-    0.8660254037844387,0.8571673007021123,0.8480480961564261,0.8386705679454239,0.8290375725550417,0.819152044288992,0.8090169943749475,0.7986355100472927,0.788010753606722,0.777145961456971,
-    0.766044443118978,0.7547095802227718,0.7431448254773942,0.7313537016191706,0.7193398003386514,0.7071067811865476,0.6946583704589971,0.6819983600624986,0.6691306063588583,0.6560590289905073,
-    0.6427876096865395,0.6293203910498377,0.6156614753256584,0.6018150231520482,0.5877852522924732,0.5735764363510464,0.5591929034707469,0.544639035015027,0.5299192642332049,0.5150380749100544,
-    0.49999999999999994,0.48480962024633717,0.4694715627858911,0.45399049973954686,0.4383711467890773,0.4226182617406995,0.40673664307580043,0.39073112848927416,0.37460659341591224,0.3583679495453002,
-    0.3420201433256689,0.32556815445715703,0.3090169943749475,0.29237170472273705,0.27563735581699966,0.258819045102521,0.24192189559966773,0.22495105434386478,0.20791169081775931,0.19080899537654497,
-    0.17364817766693028,0.15643446504023098,0.13917310096006574,0.12186934340514755,0.10452846326765373,0.08715574274765864,0.06975647374412552,0.05233595624294381,0.0348994967025007,0.01745240643728344,
-    1.2246467991473532e-16,-0.017452406437283192,-0.0348994967025009,-0.05233595624294356,-0.06975647374412483,-0.08715574274765794,-0.10452846326765305,-0.12186934340514774,-0.13917310096006552,-0.15643446504023073,
-    -0.17364817766693047,-0.19080899537654472,-0.20791169081775907,-0.22495105434386498,-0.2419218955996675,-0.25881904510252035,-0.275637355816999,-0.2923717047227364,-0.30901699437494773,-0.32556815445715676,
-    -0.34202014332566866,-0.35836794954530043,-0.374606593415912,-0.39073112848927355,-0.4067366430757998,-0.4226182617406993,-0.43837114678907707,-0.45399049973954625,-0.46947156278589086,-0.48480962024633695,
-    -0.5000000000000001,-0.5150380749100542,-0.5299192642332048,-0.5446390350150271,-0.5591929034707467,-0.5735764363510458,-0.587785252292473,-0.601815023152048,-0.6156614753256578,-0.6293203910498376,
-    -0.6427876096865393,-0.6560590289905074,-0.6691306063588582,-0.6819983600624984,-0.6946583704589974,-0.7071067811865475,-0.7193398003386509,-0.7313537016191701,-0.743144825477394,-0.7547095802227717,
-    -0.7660444431189779,-0.7771459614569711,-0.7880107536067221,-0.7986355100472928,-0.8090169943749473,-0.8191520442889916,-0.8290375725550414,-0.838670567945424,-0.848048096156426,-0.8571673007021121,
-    -0.8660254037844384,-0.874619707139396,-0.882947592858927,-0.8910065241883678,-0.8987940462991668,-0.9063077870366497,-0.913545457642601,-0.9205048534524403,-0.9271838545667873,-0.9335804264972016,
-    -0.9396926207859082,-0.9455185755993168,-0.9510565162951535,-0.9563047559630353,-0.961261695938319,-0.9659258262890683,-0.9702957262759965,-0.9743700647852351,-0.9781476007338056,-0.9816271834476639,
-    -0.984807753012208,-0.9876883405951377,-0.9902680687415704,-0.9925461516413221,-0.9945218953682734,-0.9961946980917455,-0.9975640502598242,-0.9986295347545738,-0.9993908270190957,-0.9998476951563913,
-    -1.0,-0.9998476951563913,-0.9993908270190958,-0.9986295347545738,-0.9975640502598243,-0.9961946980917455,-0.9945218953682734,-0.992546151641322,-0.9902680687415704,-0.9876883405951378,
-    -0.9848077530122081,-0.9816271834476641,-0.9781476007338058,-0.9743700647852352,-0.9702957262759966,-0.9659258262890682,-0.9612616959383188,-0.9563047559630354,-0.9510565162951536,-0.945518575599317,
-    -0.9396926207859085,-0.9335804264972021,-0.9271838545667874,-0.9205048534524405,-0.9135454576426008,-0.9063077870366499,-0.898794046299167,-0.8910065241883679,-0.8829475928589271,-0.8746197071393961,
-    -0.8660254037844386,-0.8571673007021123,-0.8480480961564262,-0.8386705679454243,-0.8290375725550421,-0.8191520442889918,-0.8090169943749476,-0.798635510047293,-0.7880107536067218,-0.7771459614569708,
-    -0.7660444431189781,-0.7547095802227722,-0.7431448254773946,-0.731353701619171,-0.7193398003386517,-0.7071067811865477,-0.6946583704589976,-0.6819983600624983,-0.6691306063588581,-0.6560590289905074,
-    -0.6427876096865396,-0.6293203910498378,-0.6156614753256588,-0.6018150231520483,-0.5877852522924734,-0.5735764363510465,-0.5591929034707473,-0.544639035015027,-0.5299192642332058,-0.5150380749100545,
-    -0.5000000000000004,-0.4848096202463369,-0.4694715627858908,-0.45399049973954697,-0.438371146789077,-0.4226182617407,-0.40673664307580015,-0.3907311284892747,-0.37460659341591235,-0.35836794954530077,
-    -0.3420201433256686,-0.32556815445715753,-0.3090169943749476,-0.29237170472273627,-0.2756373558169998,-0.2588190451025207,-0.24192189559966787,-0.22495105434386534,-0.20791169081775987,-0.19080899537654467,
-    -0.17364817766693127,-0.15643446504023112,-0.13917310096006588,-0.12186934340514811,-0.10452846326765342,-0.08715574274765832,-0.06975647374412476,-0.05233595624294437,-0.034899496702500823,-0.01745240643728445,
-};
-
-typedef struct
-{
-    uint16_t freq_hz;   //between 200 and 20khz
-    uint16_t duration_ms;
-    uint8_t volume;
-} tone_t;
 
 #define PWM_DMA_BUFFER_SIZE 1024
 __IO uint16_t pwm_dma_buffer[PWM_DMA_BUFFER_SIZE];
 
 #define PWM_FREQ 31250
 #define PWM_PERIOD  1024
-
-//FATFS fatfs;
-//FIL MyFile;
 
 #define FATFS_BUFFER_SIZE 512
 uint8_t fatfs_buffer[FATFS_BUFFER_SIZE];
@@ -143,7 +88,7 @@ void SystemClock_Config(void);
 void Error_Handler(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_TIM1_Init(void);
+static void MX_TIM3_Init(void);
 //static void MX_SPI2_Init(void);
 static void MX_TIM2_Init(void);
 //static void MX_USART2_UART_Init(void);
@@ -162,12 +107,11 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
     if(end_of_file)
     {
-        HAL_TIM_PWM_Stop_DMA(&htim1, TIM_CHANNEL_1);
-        HAL_TIMEx_PWMN_Stop(&htim1, TIM_CHANNEL_1);
+        HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
+        HAL_TIMEx_PWMN_Stop(&htim3, TIM_CHANNEL_1);
     }
     pwm_dma_ready = true;
     pwm_dma_lower_half = false;
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 	//errorcode = 667; //called ok
 }
 
@@ -175,32 +119,12 @@ void HAL_TIM_PWM_PulseHalfFinishedCallback(DMA_HandleTypeDef *hdma)
 {
     if(end_of_file)
     {
-        HAL_TIM_PWM_Stop_DMA(&htim1, TIM_CHANNEL_1);
-        HAL_TIMEx_PWMN_Stop(&htim1, TIM_CHANNEL_1);
+        HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
+        HAL_TIMEx_PWMN_Stop(&htim3, TIM_CHANNEL_1);
     }
     pwm_dma_ready = true;
     pwm_dma_lower_half = true;
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 	errorcode = 666; // never called ? why ? should investigate
-}
-
-void play_tone(tone_t tone)
-{
-    uint16_t buffer_size = PWM_FREQ / tone.freq_hz;
-    
-    for(uint32_t i = 0; i < buffer_size; i++)
-    {
-        pwm_dma_buffer[i] = sin_lookup_table[i * SIN_LOOKUP_TABLE_SIZE / buffer_size] * tone.volume/2;
-    }
-    
-    HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, buffer_size);
-
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-    
-    HAL_Delay(tone.duration_ms);
-    
-    HAL_TIM_PWM_Stop_DMA(&htim1, TIM_CHANNEL_1);
-    HAL_TIMEx_PWMN_Stop(&htim1, TIM_CHANNEL_1);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -246,103 +170,6 @@ void pwm_dma_fill_buffer(uint8_t *wav_data, uint16_t data_size, bool lower_half)
     }
 }
 
-#if 0
-void playback(const char* path)
-{
-    if(f_open(&MyFile, path, FA_OPEN_EXISTING | FA_READ) != FR_OK)
-    {
-        printf("failed to open file\n");
-        return;
-    }
-    printf("File opened\n");
-    
-    uint32_t bytesread;
-    FRESULT res;
-    
-    //read header (44 bytes)
-    res = f_read(&MyFile, header, sizeof(header), (UINT*)&bytesread);
-    
-    if((bytesread < sizeof(header)) || (res != FR_OK))
-    {
-        printf("Failed to read file\n");
-        return;
-    }
-
-    uint16_t channels = header[22] + (header[23]<<8);
-    uint32_t sample_rate = header[24] + (header[25]<<8) + (header[26]<<16) + (header[27]<<24);
-    uint16_t bits_per_sample = header[34] + (header[35]<<8);
-    
-    printf("channels: %d\n", channels);
-    printf("sample rate: %d\n", sample_rate);
-    printf("bits per sample: %d\n", bits_per_sample);
-    
-    if(channels != 1 || sample_rate != 32000 || bits_per_sample != 16)
-    {
-        printf("Type of wav encoding is not supported in current version.\n");
-        return;
-    }
-    
-    uint32_t count = 0;
-    
-    //fill up pwm buffer before we start
-    
-    //lower half
-    res = f_read(&MyFile, fatfs_buffer, FATFS_BUFFER_SIZE, (UINT*)&bytesread);
-    if(res != FR_OK)
-    {
-        printf("Read failed, count: %d\n", count);
-        end_of_file = true;
-    }
-    
-    count++;
-    pwm_dma_fill_buffer(fatfs_buffer, bytesread, true);
-    
-    //upper half
-    res = f_read(&MyFile, fatfs_buffer, FATFS_BUFFER_SIZE, (UINT*)&bytesread);
-    if(res != FR_OK)
-    {
-        printf("Read failed, count: %d\n", count);
-        end_of_file = true;
-    }
-    
-    count++;
-    pwm_dma_fill_buffer(fatfs_buffer, bytesread, false);
-    
-    //start PWM, CH1 and CH1N
-    HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-    
-    pwm_dma_ready = false;
-    
-    //loop until the end of file
-    while(end_of_file == false)
-    {
-        if(pwm_dma_ready)
-        {
-            res = f_read(&MyFile, fatfs_buffer, FATFS_BUFFER_SIZE, (UINT*)&bytesread);
-            if(res != FR_OK)
-            {
-                printf("Read failed, count: %d\n", count);
-                HAL_TIM_PWM_Stop_DMA(&htim1, TIM_CHANNEL_1);
-                HAL_TIMEx_PWMN_Stop(&htim1, TIM_CHANNEL_1);
-                return;
-            }
-            
-            if(f_eof(&MyFile))
-            {
-                printf("end of file\n");
-                end_of_file = true;
-            }
-            
-            pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
-            
-            pwm_dma_ready = false;
-            count++;
-        }
-    }
-    printf("playback done\n");
-}
-#endif
 
 /* USER CODE END PFP */
 
@@ -355,7 +182,7 @@ void drawOsc(void) {
 
 	const int w = 96, h = 16;
 	for (int x = 0; x<w; x++) {
-		int y = h/2 + (pwm_dma_buffer[x * PWM_DMA_BUFFER_SIZE / w]) * (h/2) / 512;
+		int y = h/2 + (pwm_dma_buffer[x * PWM_DMA_BUFFER_SIZE / w]) * (h/2) / 256;
 		ssd1306_DrawPixel(x, y+16, White);
 	}
 
@@ -374,8 +201,8 @@ void playback(void) {
 	//unfortunately CH1/CH1N complimentary pairs only work on pin A8 // joric
 
     //start PWM, CH1 and CH1N
-    HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
+    HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
     pwm_dma_ready = false;
 
 	uint32_t t = 0;
@@ -395,10 +222,14 @@ void playback(void) {
 			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
 #else
 
+			// see my oneliner music collection https://pastebin.com/uDvJgZ1a
 			uint32_t bytesread = PWM_DMA_BUFFER_SIZE;
 			for (int i=0; i<bytesread; i++) {
-				// see my oneliner music collection https://pastebin.com/uDvJgZ1a
-				int32_t out = ((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14));
+				int32_t out = 
+
+((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14))
+
+				;
 				pwm_dma_buffer[i] = out & 0xff;
 				t++;
 			}
@@ -429,7 +260,7 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_DMA_Init();
-  MX_TIM1_Init();
+  MX_TIM3_Init();
   //MX_FATFS_Init();
 //  MX_SPI2_Init();
   MX_TIM2_Init();
@@ -439,7 +270,7 @@ int main(void)
     
 //    printf("Up and running\r\n");
     
-    htim1.hdma[TIM_DMA_ID_CC1]->XferHalfCpltCallback = HAL_TIM_PWM_PulseHalfFinishedCallback;
+    htim3.hdma[TIM_DMA_ID_CC1]->XferHalfCpltCallback = HAL_TIM_PWM_PulseHalfFinishedCallback;
     HAL_TIM_Base_Start_IT(&htim2);
 
 #if 0
@@ -461,15 +292,9 @@ int main(void)
     ssd1306_WriteString("Playing...", Font_7x10, White);
     ssd1306_UpdateScreen();
 
-
-    play_tone((tone_t){880, 100, 4});
-    play_tone((tone_t){1000, 100, 4});
-
-
 	playback();
 
 
-    
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -479,12 +304,6 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-
-		//HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-		//HAL_Delay(500);
-
-//    play_tone((tone_t){880, 100, 4});
-//    play_tone((tone_t){1000, 100, 4});
 
 	HAL_Delay(200);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
@@ -567,8 +386,8 @@ static void MX_SPI2_Init(void)
 }
 */
 
-/* TIM1 init function */
-static void MX_TIM1_Init(void)
+/* TIM3 init function */
+static void MX_TIM3_Init(void)
 {
 
   TIM_ClockConfigTypeDef sClockSourceConfig;
@@ -576,31 +395,31 @@ static void MX_TIM1_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 2047;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 2047;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.RepetitionCounter = 0;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
 
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
 
-  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
 
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
@@ -612,7 +431,7 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -624,12 +443,12 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim3, &sBreakDeadTimeConfig) != HAL_OK)
   {
     Error_Handler();
   }
 
-  HAL_TIM_MspPostInit(&htim1);
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -693,9 +512,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
 
 }
 
@@ -708,56 +527,20 @@ static void MX_DMA_Init(void)
 */
 static void MX_GPIO_Init(void)
 {
-
-  GPIO_InitTypeDef GPIO_InitStruct;
-
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
 }
 
 
 static void MX_I2C1_Init(void)
 {
-
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000*4;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
@@ -771,7 +554,6 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
-
 }
 
 

@@ -35,11 +35,13 @@ SDA     |  B7  |  B7
 
 The player code is based on the [stm32 wav player](https://github.com/OBauck/stm32_wav_player) by [Ole Bauck](https://github.com/OBauck).
 TIM1 works as DMA at 32000Hz (mono) 16-bit samples a second.
-TIM2 supposedly fires every time when buffer is empty.
-LD2 pin is the analog audio output.
+TIM2 when buffer is empty.
+LD2 pin is 1-bit beeper, PA8 is analog audio output (TIM1_CH1 specific).
 
+TS80 needs TIM3_CH1 and DMA_Channel6 to play audio on PA6.
 The player is capable of playing high quality audio (not just beeping), I am still figuring out the details.
 It only plays mono sound now, but mind that the TS80 tip only uses two outermost pins (with the K-type thermocouple in series).
+
 
 ## Display
 
