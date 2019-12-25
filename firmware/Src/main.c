@@ -56,8 +56,6 @@
 #include <stdio.h> // snprintf
 int errorcode = 0;
 
-#include "ay_render.h"
-
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
