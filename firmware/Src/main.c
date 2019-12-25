@@ -58,6 +58,8 @@
 #include <stdio.h> // snprintf
 volatile int errorcode = 0;
 
+#include "ay_render.h"
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -71,6 +73,8 @@ I2C_HandleTypeDef hi2c1;
 
 #define PWM_DMA_BUFFER_SIZE 1024
 __IO uint16_t pwm_dma_buffer[PWM_DMA_BUFFER_SIZE];
+
+uint32_t g_buffer_size = PWM_DMA_BUFFER_SIZE;
 
 #define PWM_FREQ 31250
 #define PWM_PERIOD  1024
@@ -157,7 +161,7 @@ void drawOsc(void) {
 	uint16_t window_size = FATFS_BUFFER_SIZE/2;
 	uint16_t buffer_start = pwm_dma_lower_half ? 0 : FATFS_BUFFER_SIZE/2;
 #else
-	uint16_t window_size = PWM_DMA_BUFFER_SIZE;
+	uint16_t window_size = g_buffer_size;
 	uint16_t buffer_start = 0;
 #endif
 
@@ -203,6 +207,7 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 
 #define vf_read vf_read1
 
+#if 0
 void playback(void) {
 	uint32_t bytesread = 0;
 	uint32_t count = 0;
@@ -242,6 +247,48 @@ void playback(void) {
 		}
 	}
 }
+#endif
+
+void playback(void) {
+	ayemu_ay_t ay;
+	const int freq = 32000;
+	const int channels = 2;
+	const int bits = 16;
+	const int playerFreq = 50;
+
+	uint32_t pos = 0;
+	int frames = sizeof(frame_data)/sizeof(frame_data[0]);
+
+	ayemu_init(&ay, freq, channels, bits);
+
+	int samples_per_frame = freq / playerFreq / 3;
+
+	int frames_to_render = 4;
+
+	g_buffer_size = samples_per_frame * frames_to_render;
+
+	//start PWM, CH3 and CH3N
+	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, g_buffer_size);
+	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
+	pwm_dma_ready = false;
+
+
+	for (;;) {
+		if(pwm_dma_ready) {
+
+			for (int i=0; i<frames_to_render; i++) {
+				ayemu_set_regs (&ay, frame_data[pos]);
+				ayemu_gen_sound (&ay, pwm_dma_buffer + i*samples_per_frame, samples_per_frame);
+				pos = (pos+1) % frames;
+			}
+
+			drawOsc();
+			pwm_dma_ready = false;
+		}
+	}
+
+}
+
 
 int main(void)
 {
