@@ -52,7 +52,7 @@
 
 #include "ssd1306.h"
 
-#define CROP_OSC 1
+#define CROP_OSC 0
 #define RENDER_TO_DMA 0
 
 #include <stdio.h> // snprintf
@@ -187,16 +187,16 @@ void drawOsc(void) {
 // see my oneliner music collection https://pastebin.com/uDvJgZ1a
 // test it here: http://wurstcaptures.untergrund.net/music/
 //#define MUSIC(t) t // basic saw
+//#define MUSIC(t) ((t%128)<64?0:0xff) // square
 //#define MUSIC(t) (t%31337>>3)|(t|t>>7)
 //#define MUSIC(t) t*(((t>>12)|(t>>8))&(63&(t>>4)))
 #define MUSIC(t) ((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14))
-//#define MUSIC(t) ((t%128)<64?0:0xff)
 
 int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 	static uint32_t t;
 	for (int i=0; i<buffer_size/2; i++) {
 		int32_t amp = MUSIC(t);
-		amp = (amp * 0xff) * 255;
+		amp = (amp * 0xff) * 128;
 		buffer[i*2+0] = amp & 0xff;
 		buffer[i*2+1] = (amp >> 8) & 0xff;
 		t++;
@@ -207,7 +207,7 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 
 #define vf_read vf_read1
 
-#if 1
+#if 0
 void playback(void) {
 	uint32_t bytesread = 0;
 	uint32_t count = 0;
@@ -249,7 +249,7 @@ void playback(void) {
 }
 #endif
 
-#if 0
+#if 1
 void playback(void) {
 	ayemu_ay_t ay;
 	const int freq = 32000;
