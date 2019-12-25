@@ -52,9 +52,11 @@
 
 #include "ssd1306.h"
 
-#define DEBUG_HALF_PULSE 0
+#define CROP_OSC 0
+#define RENDER_TO_DMA 1
+
 #include <stdio.h> // snprintf
-int errorcode = 0;
+volatile int errorcode = 0;
 
 /* USER CODE END Includes */
 
@@ -64,8 +66,6 @@ int errorcode = 0;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim2;
 DMA_HandleTypeDef hdma_tim3_ch1;
-
-UART_HandleTypeDef huart2;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -77,7 +77,6 @@ __IO uint16_t pwm_dma_buffer[PWM_DMA_BUFFER_SIZE];
 
 #define FATFS_BUFFER_SIZE 512
 uint8_t fatfs_buffer[FATFS_BUFFER_SIZE];
-uint8_t header[44];
 
 volatile bool pwm_dma_ready, pwm_dma_lower_half, end_of_file;
 
@@ -89,22 +88,17 @@ void Error_Handler(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
-//static void MX_SPI2_Init(void);
 static void MX_TIM2_Init(void);
-//static void MX_USART2_UART_Init(void);
-
-
 static void MX_I2C1_Init(void);
 
-                                    
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-                                
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
+	//errorcode = 667; //called ok
     if(end_of_file)
     {
         HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
@@ -112,11 +106,12 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     }
     pwm_dma_ready = true;
     pwm_dma_lower_half = false;
-	//errorcode = 667; //called ok
 }
 
 void HAL_TIM_PWM_PulseHalfFinishedCallback(DMA_HandleTypeDef *hdma)
 {
+	errorcode = 666; // never called ? why ? should investigate
+
     if(end_of_file)
     {
         HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
@@ -124,7 +119,6 @@ void HAL_TIM_PWM_PulseHalfFinishedCallback(DMA_HandleTypeDef *hdma)
     }
     pwm_dma_ready = true;
     pwm_dma_lower_half = true;
-	errorcode = 666; // never called ? why ? should investigate
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -133,29 +127,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         //disk_timerproc();
     }
-}
-
-#ifdef __GNUC__
-  /* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf
-     set to 'Yes') calls __io_putchar() */
-  #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-#else
-  #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-#endif /* __GNUC__ */
- 
-/**
-  * @brief  Retargets the C library printf function to the USART.
-  * @param  None
-  * @retval None
-  */
-PUTCHAR_PROTOTYPE
-{
-    /* Place your implementation of fputc here */
-    /* e.g. write a character to the USART */
-    //HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 100);
-    
-    
-    return ch;
 }
 
 void pwm_dma_fill_buffer(uint8_t *wav_data, uint16_t data_size, bool lower_half)
@@ -181,63 +152,94 @@ void drawOsc(void) {
 	ssd1306_Fill(Black);
 
 	const int w = 96, h = 16;
+
+#if CROP_OSC
+	uint16_t window_size = FATFS_BUFFER_SIZE/2;
+	uint16_t buffer_start = pwm_dma_lower_half ? 0 : FATFS_BUFFER_SIZE/2;
+#else
+	uint16_t window_size = PWM_DMA_BUFFER_SIZE;
+	uint16_t buffer_start = 0;
+#endif
+
+	uint16_t maxamp = 0;
 	for (int x = 0; x<w; x++) {
-		int y = h/2 + (pwm_dma_buffer[x * PWM_DMA_BUFFER_SIZE / w]) * (h/2) / 256;
+		uint16_t amp = pwm_dma_buffer[buffer_start + x * window_size / w];
+		if (amp>maxamp) maxamp = amp;
+	}
+
+	for (int x = 0; x<w; x++) {
+		uint16_t amp = pwm_dma_buffer[buffer_start + x * window_size / w];
+		int y = amp * h / maxamp;
 		ssd1306_DrawPixel(x, y+16, White);
 	}
 
-#if DEBUG_HALF_PULSE
 	char buff[64];
-	ssd1306_SetCursor(0, 16);
-	snprintf(buff, sizeof(buff), "err: %d", errorcode);
+	ssd1306_SetCursor(0, 0);
+	snprintf(buff, sizeof(buff), "Playing: %d", errorcode);
 	ssd1306_WriteString(buff, Font_7x10, White);
-#endif
 
 	ssd1306_UpdateScreen();
 }
 
+// see my oneliner music collection https://pastebin.com/uDvJgZ1a
+// test it here: http://wurstcaptures.untergrund.net/music/
+//#define MUSIC(t) t // basic saw
+//#define MUSIC(t) (t%31337>>3)|(t|t>>7)
+//#define MUSIC(t) t*(((t>>12)|(t>>8))&(63&(t>>4)))
+#define MUSIC(t) ((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14))
+
+int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
+	static uint32_t t;
+	for (int i=0; i<buffer_size/2; i++) {
+		int32_t amp = MUSIC(t);
+		amp = (amp * 0xff) * 128;
+		buffer[i*2+0] = amp & 0xff;
+		buffer[i*2+1] = (amp >> 8) & 0xff;
+		t++;
+	}
+	* bytesread = buffer_size;
+	return 0;
+}
+
+#define vf_read vf_read1
 
 void playback(void) {
-	//unfortunately CH1/CH1N complimentary pairs only work on pin A8 // joric
+	uint32_t bytesread = 0;
+	uint32_t count = 0;
 
-    //start PWM, CH1 and CH1N
-    HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
-    HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
-    pwm_dma_ready = false;
+	//lower half
+	vf_read(fatfs_buffer, FATFS_BUFFER_SIZE, &bytesread);
+	count++;
+	pwm_dma_fill_buffer(fatfs_buffer, bytesread, true);
 
-	uint32_t t = 0;
+	//upper half
+	vf_read(fatfs_buffer, FATFS_BUFFER_SIZE, &bytesread);
+	count++;
+	pwm_dma_fill_buffer(fatfs_buffer, bytesread, true);
+
+	//start PWM, CH3 and CH3N
+	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
+	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
+	pwm_dma_ready = false;
 
 	for (;;) {
 		if(pwm_dma_ready) {
-
-#if DEBUG_HALF_PULSE
-			uint32_t bytesread = FATFS_BUFFER_SIZE;
-			for (int i=0; i<bytesread/2; i++) {
-				int32_t out = (t*(t>>5|t>>8))>>(t>>16);
-				int32_t amp = ((out & 0xff)-128) * 128;
-				fatfs_buffer[i*2+0] = amp & 0xff;
-				fatfs_buffer[i*2+1] = (amp >> 8) & 0xff;
+#if RENDER_TO_DMA
+			static uint32_t t;
+			for (int i=0; i<PWM_DMA_BUFFER_SIZE; i++) {
+				int32_t amp = MUSIC(t);
+				pwm_dma_buffer[i] = amp & 0xff;
 				t++;
 			}
-			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
 #else
-
-			// see my oneliner music collection https://pastebin.com/uDvJgZ1a
-			uint32_t bytesread = PWM_DMA_BUFFER_SIZE;
-			for (int i=0; i<bytesread; i++) {
-				int32_t out = 
-
-((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14))
-
-				;
-				pwm_dma_buffer[i] = out & 0xff;
-				t++;
-			}
-
+			vf_read(fatfs_buffer, FATFS_BUFFER_SIZE, &bytesread);
+			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
 #endif
+			drawOsc();
+			pwm_dma_ready = false;
+			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
 		}
-		pwm_dma_ready = false;
-		drawOsc();
 	}
 }
 
@@ -261,39 +263,20 @@ int main(void)
   MX_I2C1_Init();
   MX_DMA_Init();
   MX_TIM3_Init();
-  //MX_FATFS_Init();
-//  MX_SPI2_Init();
   MX_TIM2_Init();
-//  MX_USART2_UART_Init();
 
   /* USER CODE BEGIN 2 */
-    
-//    printf("Up and running\r\n");
-    
-    htim3.hdma[TIM_DMA_ID_CC1]->XferHalfCpltCallback = HAL_TIM_PWM_PulseHalfFinishedCallback;
-    HAL_TIM_Base_Start_IT(&htim2);
 
-#if 0
-    if (f_mount(&fatfs, USER_Path, 0) != FR_OK)
-    {
-        printf("error in mounting disk\n");
-    }
-    else
-    {
-        printf("disk mounted\n");
-        playback("test.wav");
-    }
-#endif
-    
+  htim3.hdma[TIM_DMA_ID_CC1]->XferHalfCpltCallback = HAL_TIM_PWM_PulseHalfFinishedCallback;
+  HAL_TIM_Base_Start_IT(&htim2);
 
-    ssd1306_Init();
-    ssd1306_Fill(Black);
-    ssd1306_SetCursor(9,19);
-    ssd1306_WriteString("Playing...", Font_7x10, White);
-    ssd1306_UpdateScreen();
+  ssd1306_Init();
+  ssd1306_Fill(Black);
+  ssd1306_SetCursor(9,19);
+  ssd1306_WriteString("Playing...", Font_7x10, White);
+  ssd1306_UpdateScreen();
 
-	playback();
-
+  playback();
 
   /* USER CODE END 2 */
 
@@ -305,10 +288,9 @@ int main(void)
 
   /* USER CODE BEGIN 3 */
 
-	HAL_Delay(200);
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-	HAL_Delay(200);
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+	// blink
+	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	HAL_Delay(1000);
 
   }
   /* USER CODE END 3 */
@@ -484,25 +466,6 @@ static void MX_TIM2_Init(void)
 
 }
 
-/* USART2 init function */
-/*
-static void MX_USART2_UART_Init(void)
-{
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-*/
-
 /** 
   * Enable DMA controller clock
   */
@@ -527,11 +490,19 @@ static void MX_DMA_Init(void)
 */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct;
+
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin : LED_Pin */
+  GPIO_InitStruct.Pin = LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -575,26 +546,6 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler */ 
 }
-
-#ifdef USE_FULL_ASSERT
-
-/**
-   * @brief Reports the name of the source file and the source line number
-   * where the assert_param error has occurred.
-   * @param file: pointer to the source file name
-   * @param line: assert_param error line source number
-   * @retval None
-   */
-void assert_failed(uint8_t* file, uint32_t line)
-{
-  /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-    ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
-
-}
-
-#endif
 
 /**
   * @}
