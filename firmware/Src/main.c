@@ -52,6 +52,10 @@
 
 #include "ssd1306.h"
 
+#define DEBUG_HALF_PULSE 0
+#include <stdio.h> // snprintf
+int errorcode = 0;
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -164,6 +168,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     pwm_dma_ready = true;
     pwm_dma_lower_half = false;
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	//errorcode = 667; //called ok
 }
 
 void HAL_TIM_PWM_PulseHalfFinishedCallback(DMA_HandleTypeDef *hdma)
@@ -176,6 +181,7 @@ void HAL_TIM_PWM_PulseHalfFinishedCallback(DMA_HandleTypeDef *hdma)
     pwm_dma_ready = true;
     pwm_dma_lower_half = true;
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	errorcode = 666; // never called ? why ? should investigate
 }
 
 void play_tone(tone_t tone)
@@ -240,9 +246,9 @@ void pwm_dma_fill_buffer(uint8_t *wav_data, uint16_t data_size, bool lower_half)
     }
 }
 
+#if 0
 void playback(const char* path)
 {
-#if 0
     if(f_open(&MyFile, path, FA_OPEN_EXISTING | FA_READ) != FR_OK)
     {
         printf("failed to open file\n");
@@ -335,8 +341,8 @@ void playback(const char* path)
         }
     }
     printf("playback done\n");
-#endif
 }
+#endif
 
 /* USER CODE END PFP */
 
@@ -344,119 +350,65 @@ void playback(const char* path)
 
 /* USER CODE END 0 */
 
-#define NOTE_B0  31
-#define NOTE_C1  33
-#define NOTE_CS1 35
-#define NOTE_D1  37
-#define NOTE_DS1 39
-#define NOTE_E1  41
-#define NOTE_F1  44
-#define NOTE_FS1 46
-#define NOTE_G1  49
-#define NOTE_GS1 52
-#define NOTE_A1  55
-#define NOTE_AS1 58
-#define NOTE_B1  62
-#define NOTE_C2  65
-#define NOTE_CS2 69
-#define NOTE_D2  73
-#define NOTE_DS2 78
-#define NOTE_E2  82
-#define NOTE_F2  87
-#define NOTE_FS2 93
-#define NOTE_G2  98
-#define NOTE_GS2 104
-#define NOTE_A2  110
-#define NOTE_AS2 117
-#define NOTE_B2  123
-#define NOTE_C3  131
-#define NOTE_CS3 139
-#define NOTE_D3  147
-#define NOTE_DS3 156
-#define NOTE_E3  165
-#define NOTE_F3  175
-#define NOTE_FS3 185
-#define NOTE_G3  196
-#define NOTE_GS3 208
-#define NOTE_A3  220
-#define NOTE_AS3 233
-#define NOTE_B3  247
-#define NOTE_C4  262
-#define NOTE_CS4 277
-#define NOTE_D4  294
-#define NOTE_DS4 311
-#define NOTE_E4  330
-#define NOTE_F4  349
-#define NOTE_FS4 370
-#define NOTE_G4  392
-#define NOTE_GS4 415
-#define NOTE_A4  440
-#define NOTE_AS4 466
-#define NOTE_B4  494
-#define NOTE_C5  523
-#define NOTE_CS5 554
-#define NOTE_D5  587
-#define NOTE_DS5 622
-#define NOTE_E5  659
-#define NOTE_F5  698
-#define NOTE_FS5 740
-#define NOTE_G5  784
-#define NOTE_GS5 831
-#define NOTE_A5  880
-#define NOTE_AS5 932
-#define NOTE_B5  988
-#define NOTE_C6  1047
-#define NOTE_CS6 1109
-#define NOTE_D6  1175
-#define NOTE_DS6 1245
-#define NOTE_E6  1319
-#define NOTE_F6  1397
-#define NOTE_FS6 1480
-#define NOTE_G6  1568
-#define NOTE_GS6 1661
-#define NOTE_A6  1760
-#define NOTE_AS6 1865
-#define NOTE_B6  1976
-#define NOTE_C7  2093
-#define NOTE_CS7 2217
-#define NOTE_D7  2349
-#define NOTE_DS7 2489
-#define NOTE_E7  2637
-#define NOTE_F7  2794
-#define NOTE_FS7 2960
-#define NOTE_G7  3136
-#define NOTE_GS7 3322
-#define NOTE_A7  3520
-#define NOTE_AS7 3729
-#define NOTE_B7  3951
-#define NOTE_C8  4186
-#define NOTE_CS8 4435
-#define NOTE_D8  4699
-#define NOTE_DS8 4978
+void drawOsc(void) {
+	ssd1306_Fill(Black);
 
-int wish_melody[] = {
-  NOTE_B3, 
-  NOTE_F4, NOTE_F4, NOTE_G4, NOTE_F4, NOTE_E4,
-  NOTE_D4, NOTE_D4, NOTE_D4,
-  NOTE_G4, NOTE_G4, NOTE_A4, NOTE_G4, NOTE_F4,
-  NOTE_E4, NOTE_E4, NOTE_E4,
-  NOTE_A4, NOTE_A4, NOTE_B4, NOTE_A4, NOTE_G4,
-  NOTE_F4, NOTE_D4, NOTE_B3, NOTE_B3,
-  NOTE_D4, NOTE_G4, NOTE_E4,
-  NOTE_F4
-};
+	const int w = 96, h = 16;
+	for (int x = 0; x<w; x++) {
+		int y = h/2 + (pwm_dma_buffer[x * PWM_DMA_BUFFER_SIZE / w]) * (h/2) / 512;
+		ssd1306_DrawPixel(x, y+16, White);
+	}
 
-int wish_tempo[] = {
-  4,
-  4, 8, 8, 8, 8,
-  4, 4, 4,
-  4, 8, 8, 8, 8,
-  4, 4, 4,
-  4, 8, 8, 8, 8,
-  4, 4, 8, 8,
-  4, 4, 4,
-  2
-};
+#if DEBUG_HALF_PULSE
+	char buff[64];
+	ssd1306_SetCursor(0, 16);
+	snprintf(buff, sizeof(buff), "err: %d", errorcode);
+	ssd1306_WriteString(buff, Font_7x10, White);
+#endif
+
+	ssd1306_UpdateScreen();
+}
+
+
+void playback(void) {
+	//unfortunately CH1/CH1N complimentary pairs only work on pin A8 // joric
+
+    //start PWM, CH1 and CH1N
+    HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
+    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+    pwm_dma_ready = false;
+
+	uint32_t t = 0;
+
+	for (;;) {
+		if(pwm_dma_ready) {
+
+#if DEBUG_HALF_PULSE
+			uint32_t bytesread = FATFS_BUFFER_SIZE;
+			for (int i=0; i<bytesread/2; i++) {
+				int32_t out = (t*(t>>5|t>>8))>>(t>>16);
+				int32_t amp = ((out & 0xff)-128) * 128;
+				fatfs_buffer[i*2+0] = amp & 0xff;
+				fatfs_buffer[i*2+1] = (amp >> 8) & 0xff;
+				t++;
+			}
+			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
+#else
+
+			uint32_t bytesread = PWM_DMA_BUFFER_SIZE;
+			for (int i=0; i<bytesread; i++) {
+				// see my oneliner music collection https://pastebin.com/uDvJgZ1a
+				int32_t out = ((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14));
+				pwm_dma_buffer[i] = out & 0xff;
+				t++;
+			}
+
+#endif
+		}
+		pwm_dma_ready = false;
+		drawOsc();
+	}
+}
 
 int main(void)
 {
@@ -506,22 +458,15 @@ int main(void)
     ssd1306_Init();
     ssd1306_Fill(Black);
     ssd1306_SetCursor(9,19);
-    ssd1306_WriteString("Merry Xmas!", Font_7x10, White);
+    ssd1306_WriteString("Playing...", Font_7x10, White);
     ssd1306_UpdateScreen();
 
 
-	int notes = sizeof(wish_melody)/sizeof(wish_melody[0]);
+    play_tone((tone_t){880, 100, 4});
+    play_tone((tone_t){1000, 100, 4});
 
-	for (int i = 0; i<notes; i++) {
-		tone_t t;
-		t.freq_hz = wish_melody[i];
-		t.duration_ms = 1000/wish_tempo[i];
-		t.volume = 1;
-		play_tone(t);
-	}
 
-    //play_tone((tone_t){880, 100, 4});
-    //play_tone((tone_t){1000, 100, 4});
+	playback();
 
 
     
