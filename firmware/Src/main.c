@@ -52,8 +52,8 @@
 
 #include "ssd1306.h"
 
-#define CROP_OSC 0
-#define RENDER_TO_DMA 1
+#define CROP_OSC 1
+#define RENDER_TO_DMA 0
 
 #include <stdio.h> // snprintf
 volatile int errorcode = 0;
@@ -63,7 +63,6 @@ volatile int errorcode = 0;
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-//SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim2;
@@ -191,12 +190,13 @@ void drawOsc(void) {
 //#define MUSIC(t) (t%31337>>3)|(t|t>>7)
 //#define MUSIC(t) t*(((t>>12)|(t>>8))&(63&(t>>4)))
 #define MUSIC(t) ((-t&4095)*(255&t*(t&(t>>13)))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14))
+//#define MUSIC(t) ((t%128)<64?0:0xff)
 
 int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 	static uint32_t t;
 	for (int i=0; i<buffer_size/2; i++) {
 		int32_t amp = MUSIC(t);
-		amp = (amp * 0xff) * 128;
+		amp = (amp * 0xff) * 255;
 		buffer[i*2+0] = amp & 0xff;
 		buffer[i*2+1] = (amp >> 8) & 0xff;
 		t++;
@@ -207,7 +207,7 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 
 #define vf_read vf_read1
 
-#if 0
+#if 1
 void playback(void) {
 	uint32_t bytesread = 0;
 	uint32_t count = 0;
@@ -249,6 +249,7 @@ void playback(void) {
 }
 #endif
 
+#if 0
 void playback(void) {
 	ayemu_ay_t ay;
 	const int freq = 32000;
@@ -288,6 +289,7 @@ void playback(void) {
 	}
 
 }
+#endif
 
 
 int main(void)
@@ -391,29 +393,6 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-/* SPI2 init function */
-/*
-static void MX_SPI2_Init(void)
-{
-  hspi2.Instance = SPI2;
-  hspi2.Init.Mode = SPI_MODE_MASTER;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi2.Init.CRCPolynomial = 10;
-
-  if (HAL_SPI_Init(&hspi2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-*/
 
 /* TIM3 init function */
 static void MX_TIM3_Init(void)
