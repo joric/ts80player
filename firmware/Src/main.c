@@ -53,12 +53,10 @@
 #include "ssd1306.h"
 
 #define CROP_OSC 0
-#define RENDER_TO_DMA 0
+#define RENDER_TO_DMA 1
 
 #include <stdio.h> // snprintf
 volatile int errorcode = 0;
-
-#include "ay_render.h"
 
 /* USER CODE END Includes */
 
@@ -205,9 +203,37 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 	return 0;
 }
 
-#define vf_read vf_read1
 
-#if 0
+//#include "fatal.pt3.h"
+//#define pt3_data fatal_pt3
+//#define pt3_size fatal_pt3_len
+
+#include "rage.pt3.h"
+#define pt3_data rage_pt3
+#define pt3_size rage_pt3_len
+
+extern uint32_t pt3_player(uint32_t sample, uint32_t rate, uint8_t * data, uint32_t size, uint32_t * samples);
+
+int vf_read2(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
+	uint32_t samples;
+	static uint32_t t;
+	for (int i=0; i<buffer_size/2; i++) {
+		int32_t amp = pt3_player(t, PWM_FREQ, pt3_data, pt3_size, &samples);
+		uint16_t mix_l = amp & 0xffff;
+		uint16_t mix_r = (amp >> 16);
+		amp = (mix_l/2 + mix_r/2);
+		buffer[i*2+0] = amp & 0xff;
+		buffer[i*2+1] = (amp >> 8) & 0xff;
+		t++;
+	}
+	* bytesread = buffer_size;
+	return 0;
+}
+
+#define vf_read vf_read2
+
+#if 1
+
 void playback(void) {
 	uint32_t bytesread = 0;
 	uint32_t count = 0;
@@ -227,13 +253,20 @@ void playback(void) {
 	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
 	pwm_dma_ready = false;
 
+
 	for (;;) {
 		if(pwm_dma_ready) {
 #if RENDER_TO_DMA
+			uint32_t samples;
 			static uint32_t t;
 			for (int i=0; i<PWM_DMA_BUFFER_SIZE; i++) {
-				int32_t amp = MUSIC(t);
-				pwm_dma_buffer[i] = amp & 0xff;
+
+				int32_t amp = pt3_player(t, PWM_FREQ/2, pt3_data, pt3_size, &samples);
+
+				uint16_t mix_l = amp & 0xffff;
+				uint16_t mix_r = (amp >> 16);
+
+				pwm_dma_buffer[i] = (mix_l + mix_r) / 512;
 				t++;
 			}
 #else
@@ -248,49 +281,6 @@ void playback(void) {
 	}
 }
 #endif
-
-#if 1
-void playback(void) {
-	ayemu_ay_t ay;
-	const int freq = 32000;
-	const int channels = 2;
-	const int bits = 16;
-	const int playerFreq = 50;
-
-	uint32_t pos = 0;
-	int frames = sizeof(frame_data)/sizeof(frame_data[0]);
-
-	ayemu_init(&ay, freq, channels, bits);
-
-	int samples_per_frame = freq / playerFreq / 3;
-
-	int frames_to_render = 4;
-
-	g_buffer_size = samples_per_frame * frames_to_render;
-
-	//start PWM, CH3 and CH3N
-	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, g_buffer_size);
-	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
-	pwm_dma_ready = false;
-
-
-	for (;;) {
-		if(pwm_dma_ready) {
-
-			for (int i=0; i<frames_to_render; i++) {
-				ayemu_set_regs (&ay, frame_data[pos]);
-				ayemu_gen_sound (&ay, pwm_dma_buffer + i*samples_per_frame, samples_per_frame);
-				pos = (pos+1) % frames;
-			}
-
-			drawOsc();
-			pwm_dma_ready = false;
-		}
-	}
-
-}
-#endif
-
 
 int main(void)
 {
