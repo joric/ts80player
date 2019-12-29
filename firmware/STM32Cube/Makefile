@@ -60,7 +60,6 @@ Src/stm32f1xx_hal_msp.c \
 Src/stm32f1xx_it.c \
 Src/ssd1306.c \
 Src/ssd1306_fonts.c \
-Src/pt3_player.c \
 $(FIRMWARE)/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c \
 $(FIRMWARE)/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim_ex.c \
 $(FIRMWARE)/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash.c \

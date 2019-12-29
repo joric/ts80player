@@ -2,6 +2,10 @@
 // uses portions of AY_Emul, zxssk and ayemu
 // plain C version by Joric, 2019
 
+#include "rage.pt3.h"
+#define music_data      rage_pt3
+#define music_data_size rage_pt3_len
+
 #include <stdint.h>
 #include <string.h>
 
@@ -915,45 +919,36 @@ uint32_t ayemu_mix(ayemu_ay_t *ay)
 		mix_r /= ay->Amp_Global;
 	}
 
-
 	return (mix_l<<16) | mix_r;
 }
 
-uint32_t pt3_player(uint32_t sample, uint32_t rate, uint8_t * data, uint32_t size, uint32_t * samples) {
-	static int init;
-	static ayemu_ay_t ay;
-	static PT3Player static_player;
-	static int total_samples;
+ayemu_ay_t ay;
+PT3Player static_player;
+int total_samples;
+int current_sample = 0;
+int playerFreq = 50;
+int samples_per_frame = 0;
+int rate = PWM_FREQ;
 
-	int playerFreq = 50;
-	uint32_t samples_per_frame = rate / playerFreq;
-
+void pt3_init() {
 	PT3Player * player = &static_player;
+	PT3Player_Init(player, music_data, music_data_size);
+	ayemu_init(&ay, rate, 2, 16);
+	samples_per_frame = rate / playerFreq;
+	total_samples = samples_per_frame * player->time;
+}
 
-	if (init==0) {
-		init = 1;
-
-		PT3Player_Init(player, data, size);
-
-		ayemu_init(&ay, rate, 2, 16);
-		total_samples = samples_per_frame * player->time;
-
-		//printf("file size: %d\n", size);
-		//printf("time: %d loop: %d\n", player->time, player->loop);
-		//printf("total_samples: %d\n", total_samples);
-		//printf("samples_per_frame: %d\n", samples_per_frame);
-	}
-
-	if (sample % samples_per_frame == 0) {
+uint8_t pt3_play() {
+	PT3Player * player = &static_player;
+	if (current_sample % samples_per_frame == 0) {
 		ayemu_set_regs (&ay, player->regs[0]);
 		PT3Player_Step(player);
 	}
-
-	*samples = total_samples;
-
-	return ayemu_mix(&ay);
+	current_sample++;
+	uint32_t out = ayemu_mix(&ay);
+	uint32_t amp = ((out & 0xff00) >> 8) + ((out & 0xff000000) >> 24); //convert to 8-bit mono
+	return amp;
 }
-
 
 /*
 int main() {

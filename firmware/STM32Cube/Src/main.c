@@ -68,7 +68,7 @@ DMA_HandleTypeDef hdma_tim3_ch1;
 
 I2C_HandleTypeDef hi2c1;
 
-#define PWM_DMA_BUFFER_SIZE 1024
+#define PWM_DMA_BUFFER_SIZE 512
 __IO uint16_t pwm_dma_buffer[PWM_DMA_BUFFER_SIZE];
 
 uint32_t g_buffer_size = PWM_DMA_BUFFER_SIZE;
@@ -204,35 +204,15 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 }
 
 
-//#include "fatal.pt3.h"
-//#define pt3_data fatal_pt3
-//#define pt3_size fatal_pt3_len
-
-#include "rage.pt3.h"
-#define pt3_data rage_pt3
-#define pt3_size rage_pt3_len
-
-extern uint32_t pt3_player(uint32_t sample, uint32_t rate, uint8_t * data, uint32_t size, uint32_t * samples);
-
 int vf_read2(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
-	uint32_t samples;
-	static uint32_t t;
-	for (int i=0; i<buffer_size/2; i++) {
-		int32_t amp = pt3_player(t, PWM_FREQ, pt3_data, pt3_size, &samples);
-		uint16_t mix_l = amp & 0xffff;
-		uint16_t mix_r = (amp >> 16);
-		amp = (mix_l/2 + mix_r/2);
-		buffer[i*2+0] = amp & 0xff;
-		buffer[i*2+1] = (amp >> 8) & 0xff;
-		t++;
-	}
-	* bytesread = buffer_size;
 	return 0;
 }
 
 #define vf_read vf_read2
 
 #if 1
+
+#include "pt3_play_shiru.h"
 
 void playback(void) {
 	uint32_t bytesread = 0;
@@ -253,27 +233,20 @@ void playback(void) {
 	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
 	pwm_dma_ready = false;
 
-
 	for (;;) {
 		if(pwm_dma_ready) {
 #if RENDER_TO_DMA
-			uint32_t samples;
 			static uint32_t t;
 			for (int i=0; i<PWM_DMA_BUFFER_SIZE; i++) {
-
-				int32_t amp = pt3_player(t, PWM_FREQ/2, pt3_data, pt3_size, &samples);
-
-				uint16_t mix_l = amp & 0xffff;
-				uint16_t mix_r = (amp >> 16);
-
-				pwm_dma_buffer[i] = (mix_l + mix_r) / 512;
+				if (t==0) pt3_init();
+				pwm_dma_buffer[i] = pt3_play();
 				t++;
 			}
 #else
 			vf_read(fatfs_buffer, FATFS_BUFFER_SIZE, &bytesread);
 			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
 #endif
-			drawOsc();
+//			drawOsc();
 			pwm_dma_ready = false;
 			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
