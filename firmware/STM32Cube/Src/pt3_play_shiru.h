@@ -19,7 +19,7 @@
 volatile uint32_t t = 0;
 
 #define AY_CLOCK      1773400         //pitch
-#define SAMPLE_RATE   44010           //quality of the sound, i2s DAC can't handle more than 44100 by some reason (not even 48000)
+#define SAMPLE_RATE   32000           //quality of the sound, i2s DAC can't handle more than 44100 by some reason (not even 48000)
 #define FRAME_RATE    50              //speed
 
 typedef struct {
