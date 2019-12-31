@@ -49,7 +49,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-
 #include "ssd1306.h"
 
 #define CROP_OSC 0
@@ -68,7 +67,7 @@ DMA_HandleTypeDef hdma_tim3_ch1;
 
 I2C_HandleTypeDef hi2c1;
 
-#define PWM_DMA_BUFFER_SIZE 512
+#define PWM_DMA_BUFFER_SIZE 256
 __IO uint16_t pwm_dma_buffer[PWM_DMA_BUFFER_SIZE];
 
 uint32_t g_buffer_size = PWM_DMA_BUFFER_SIZE;
@@ -76,7 +75,7 @@ uint32_t g_buffer_size = PWM_DMA_BUFFER_SIZE;
 #define PWM_FREQ 31250
 #define PWM_PERIOD  1024
 
-#define FATFS_BUFFER_SIZE 512
+#define FATFS_BUFFER_SIZE (PWM_DMA_BUFFER_SIZE/2)
 uint8_t fatfs_buffer[FATFS_BUFFER_SIZE];
 
 volatile bool pwm_dma_ready, pwm_dma_lower_half, end_of_file;
@@ -178,9 +177,21 @@ void drawOsc(void) {
 	ssd1306_SetCursor(0, 0);
 	snprintf(buff, sizeof(buff), "Playing: %d", errorcode);
 	ssd1306_WriteString(buff, Font_7x10, White);
-
 	ssd1306_UpdateScreen();
 }
+
+void drawTicks(uint32_t t) {
+	if (t%1000!=0) return;
+	ssd1306_Fill(Black);
+	char buf[64];
+	ssd1306_SetCursor(0, 16);
+	snprintf(buf, sizeof(buf), "Playing: %lu", t);
+	ssd1306_WriteString(buf, Font_7x10, White);
+	ssd1306_UpdateScreen();
+}
+
+//#include "pt3_play_zxssk.h"
+#include "pt3_play_shiru.h"
 
 // see my oneliner music collection https://pastebin.com/uDvJgZ1a
 // test it here: http://wurstcaptures.untergrund.net/music/
@@ -192,8 +203,9 @@ void drawOsc(void) {
 
 int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 	static uint32_t t;
+	if (t==0) pt3_init();
 	for (int i=0; i<buffer_size/2; i++) {
-		int32_t amp = MUSIC(t);
+		int32_t amp = MUSIC(t);//pt3_play();
 		amp = (amp * 0xff) * 128;
 		buffer[i*2+0] = amp & 0xff;
 		buffer[i*2+1] = (amp >> 8) & 0xff;
@@ -205,15 +217,21 @@ int vf_read1(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
 
 
 int vf_read2(uint8_t * buffer, uint32_t buffer_size, uint32_t * bytesread) {
+	static uint32_t t;
+	if (t==0) pt3_init();
+	for (int i=0; i<buffer_size; i++) {
+		int32_t amp = pt3_play();
+		amp = (amp * 0xff);
+		buffer[i] = amp & 0xff;
+		t++;
+	}
+	* bytesread = buffer_size;
 	return 0;
 }
 
 #define vf_read vf_read2
 
 #if 1
-
-#include "pt3_play_shiru.h"
-
 void playback(void) {
 	uint32_t bytesread = 0;
 	uint32_t count = 0;
@@ -229,12 +247,24 @@ void playback(void) {
 	pwm_dma_fill_buffer(fatfs_buffer, bytesread, true);
 
 	//start PWM, CH3 and CH3N
+#if RENDER_TO_DMA
+	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, PWM_DMA_BUFFER_SIZE);
+#else
 	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)pwm_dma_buffer, FATFS_BUFFER_SIZE);
+#endif
 	HAL_TIMEx_PWMN_Start(&htim3, TIM_CHANNEL_1);
 	pwm_dma_ready = false;
 
+	// looks like speed issues, we can't catch up to pwm_dma_ready
+	// especially on turbosound (6-channel) tracks
+	// making dma buffer smaller doesn't help
+	// need to optimize the player
+	// shiru seems faster but it renders envelopes incorrectly
+	// zxssk seems accurate but it's slower
+
 	for (;;) {
-		if(pwm_dma_ready) {
+		//if(pwm_dma_ready) // this fixes the speed but there's no sync anymore // NB!
+		{
 #if RENDER_TO_DMA
 			static uint32_t t;
 			for (int i=0; i<PWM_DMA_BUFFER_SIZE; i++) {
@@ -243,13 +273,21 @@ void playback(void) {
 				t++;
 			}
 #else
+			// this doesn't seem to work so far
+			// probably because half pulse never called
 			vf_read(fatfs_buffer, FATFS_BUFFER_SIZE, &bytesread);
 			pwm_dma_fill_buffer(fatfs_buffer, bytesread, pwm_dma_lower_half);
 #endif
-//			drawOsc();
-			pwm_dma_ready = false;
-			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
+			//OLED display seems very time consuming as well
+			//if you get crackling noise, don't draw anything!
+			//drawOsc();
+			//drawTicks(t);
+
+			pwm_dma_ready = false;
+
+			//LEDS seem to interfere with audio as well (noise)
+			//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 		}
 	}
 }
