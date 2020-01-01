@@ -1,3 +1,371 @@
+// defines pt3_init() and pt3_play()
+// you don't need to include other files
+
+#include "music_data.h"
+
+volatile uint32_t t = 0;
+
+#define AY_CLOCK      1773400         //pitch
+#define SAMPLE_RATE   44010           //quality of the sound, i2s DAC can't handle more than 44100 by some reason (not even 48000)
+#define FRAME_RATE    50              //speed
+
+#ifdef PWM_FREQ
+#undef SAMPLE_RATE
+#define SAMPLE_RATE PWM_FREQ
+#endif
+
+
+// ay_emu.h - begin
+
+struct toneStruct {
+  int count;
+  int state;
+};
+
+struct noiseStruct {
+  int count;
+  int reg;
+  int qcc;
+  int state;
+};
+
+struct envStruct {
+  int count;
+  int dac;
+  int up;
+};
+
+struct AYChipStruct {
+  toneStruct tone[3];
+  noiseStruct noise;
+  envStruct env;
+
+  int reg[16];
+  int dac[3];
+  int out[3];
+
+  int freqDiv;
+};
+
+
+
+//�������� ��������� (��������, (�)HackerKAY)
+
+#define VDIV	3
+
+int volTab[16] = {
+  0 / VDIV,
+  836 / VDIV,
+  1212 / VDIV,
+  1773 / VDIV,
+  2619 / VDIV,
+  3875 / VDIV,
+  5397 / VDIV,
+  8823 / VDIV,
+  10392 / VDIV,
+  16706 / VDIV,
+  23339 / VDIV,
+  29292 / VDIV,
+  36969 / VDIV,
+  46421 / VDIV,
+  55195 / VDIV,
+  65535 / VDIV
+};
+
+
+
+void ay_init(AYChipStruct *ay)
+{
+  memset(ay, 0, sizeof(AYChipStruct));
+
+  ay->noise.reg = 0x0ffff;
+  ay->noise.qcc = 0;
+  ay->noise.state = 0;
+}
+
+
+
+void ay_out(AYChipStruct *ay, int reg, int value)
+{
+  if (reg > 13) return;
+
+  //������ � ������ �� ��������� ����� ��������� ������ ��� ����
+  //�����, ��� ������ R13 ���������� ����� �������� ���������
+  switch (reg)
+  {
+    case 1:
+    case 3:
+    case 5:
+      value &= 15;
+      break;
+    case 8:
+    case 9:
+    case 10:
+    case 6:
+      value &= 31;
+      break;
+    case 13:
+      value &= 15;
+      ay->env.count = 0;
+      if (value & 2)
+      {
+        ay->env.dac = 0;
+        ay->env.up = 1;
+      }
+      else
+      {
+        ay->env.dac = 15;
+        ay->env.up = 0;
+      }
+      break;
+  }
+
+  ay->reg[reg] = value;
+}
+
+
+
+inline void ay_tick(AYChipStruct *ay, int ticks)
+{
+  int noise_di;
+  int i, ta, tb, tc, na, nb, nc;
+
+  ay->out[0] = 0;
+  ay->out[1] = 0;
+  ay->out[2] = 0;
+
+  for (i = 0; i < ticks; ++i)
+  {
+    //�������� �������� �������
+    ay->freqDiv ^= 1;
+
+    //����������
+
+    if (ay->tone[0].count >= (ay->reg[0] | (ay->reg[1] << 8)))
+    {
+      ay->tone[0].count = 0;
+      ay->tone[0].state ^= 1;
+    }
+    if (ay->tone[1].count >= (ay->reg[2] | (ay->reg[3] << 8)))
+    {
+      ay->tone[1].count = 0;
+      ay->tone[1].state ^= 1;
+    }
+    if (ay->tone[2].count >= (ay->reg[4] | (ay->reg[5] << 8)))
+    {
+      ay->tone[2].count = 0;
+      ay->tone[2].state ^= 1;
+    }
+
+    ay->tone[0].count++;
+    ay->tone[1].count++;
+    ay->tone[2].count++;
+
+
+    if (ay->freqDiv)
+    {
+
+      //��� (�������� ��������, (C)HackerKAY)
+
+      if (ay->noise.count == 0)
+      {
+        noise_di = (ay->noise.qcc ^ ((ay->noise.reg >> 13) & 1)) ^ 1;
+        ay->noise.qcc = (ay->noise.reg >> 15) & 1;
+        ay->noise.state = ay->noise.qcc;
+        ay->noise.reg = (ay->noise.reg << 1) | noise_di;
+      }
+
+      ay->noise.count = (ay->noise.count + 1) & 31;
+      if (ay->noise.count >= ay->reg[6]) ay->noise.count = 0;
+
+
+      //���������
+
+      if (ay->env.count == 0)
+      {
+        switch (ay->reg[13])
+        {
+          case 0:
+          case 1:
+          case 2:
+          case 3:
+          case 9:
+            if (ay->env.dac > 0) ay->env.dac--;
+            break;
+          case 4:
+          case 5:
+          case 6:
+          case 7:
+          case 15:
+            if (ay->env.up)
+            {
+              ay->env.dac++;
+              if (ay->env.dac > 15)
+              {
+                ay->env.dac = 0;
+                ay->env.up = 0;
+              }
+            }
+            break;
+
+          case 8:
+            ay->env.dac--;
+            if (ay->env.dac < 0) ay->env.dac = 15;
+            break;
+
+          case 10:
+          case 14:
+            if (!ay->env.up)
+            {
+              ay->env.dac--;
+              if (ay->env.dac < 0)
+              {
+                ay->env.dac = 0;
+                ay->env.up = 1;
+              }
+            }
+            else
+            {
+              ay->env.dac++;
+              if (ay->env.dac > 15)
+              {
+                ay->env.dac = 15;
+                ay->env.up = 0;
+              }
+
+            }
+            break;
+
+          case 11:
+            if (!ay->env.up)
+            {
+              ay->env.dac--;
+              if (ay->env.dac < 0)
+              {
+                ay->env.dac = 15;
+                ay->env.up = 1;
+              }
+            }
+            break;
+
+          case 12:
+            ay->env.dac++;
+            if (ay->env.dac > 15) ay->env.dac = 0;
+            break;
+
+          case 13:
+            if (ay->env.dac < 15) ay->env.dac++;
+            break;
+
+        }
+      }
+
+      ay->env.count++;
+      if (ay->env.count >= (ay->reg[11] | (ay->reg[12] << 8))) ay->env.count = 0;
+
+    }
+
+    //������
+
+    ta = ay->tone[0].state | ((ay->reg[7] >> 0) & 1);
+    tb = ay->tone[1].state | ((ay->reg[7] >> 1) & 1);
+    tc = ay->tone[2].state | ((ay->reg[7] >> 2) & 1);
+    na = ay->noise.state | ((ay->reg[7] >> 3) & 1);
+    nb = ay->noise.state | ((ay->reg[7] >> 4) & 1);
+    nc = ay->noise.state | ((ay->reg[7] >> 5) & 1);
+
+    if (ay->reg[8] & 16)
+    {
+      ay->dac[0] = ay->env.dac;
+    }
+    else
+    {
+      if (ta & na) ay->dac[0] = ay->reg[8]; else ay->dac[0] = 0;
+    }
+
+    if (ay->reg[9] & 16)
+    {
+      ay->dac[1] = ay->env.dac;
+    }
+    else
+    {
+      if (tb & nb) ay->dac[1] = ay->reg[9]; else ay->dac[1] = 0;
+    }
+
+    if (ay->reg[10] & 16)
+    {
+      ay->dac[2] = ay->env.dac;
+    }
+    else
+    {
+      if (tc & nc) ay->dac[2] = ay->reg[10]; else ay->dac[2] = 0;
+    }
+
+    ay->out[0] += volTab[ay->dac[0]];
+    ay->out[1] += volTab[ay->dac[1]];
+    ay->out[2] += volTab[ay->dac[2]];
+  }
+
+  ay->out[0] /= ticks;
+  ay->out[1] /= ticks;
+  ay->out[2] /= ticks;
+}
+
+// ay_emu.h - end
+
+int interruptCnt;
+
+struct PT3_Channel_Parameters
+{
+  unsigned short Address_In_Pattern, OrnamentPointer, SamplePointer, Ton;
+  unsigned char Loop_Ornament_Position, Ornament_Length, Position_In_Ornament, Loop_Sample_Position, Sample_Length, Position_In_Sample, Volume, Number_Of_Notes_To_Skip, Note, Slide_To_Note, Amplitude;
+  bool Envelope_Enabled, Enabled, SimpleGliss;
+  short Current_Amplitude_Sliding, Current_Noise_Sliding, Current_Envelope_Sliding, Ton_Slide_Count, Current_OnOff, OnOff_Delay, OffOn_Delay, Ton_Slide_Delay, Current_Ton_Sliding, Ton_Accumulator, Ton_Slide_Step, Ton_Delta;
+  signed char Note_Skip_Counter;
+};
+
+struct PT3_Parameters
+{
+  unsigned char Env_Base_lo;
+  unsigned char Env_Base_hi;
+  short Cur_Env_Slide, Env_Slide_Add;
+  signed char Cur_Env_Delay, Env_Delay;
+  unsigned char Noise_Base, Delay, AddToNoise, DelayCounter, CurrentPosition;
+  int Version;
+};
+
+struct PT3_SongInfo
+{
+  PT3_Parameters PT3;
+  PT3_Channel_Parameters PT3_A, PT3_B, PT3_C;
+};
+
+struct AYSongInfo
+{
+  unsigned char* module;
+  unsigned char* module1;
+  int module_len;
+  PT3_SongInfo data;
+  PT3_SongInfo data1;
+  bool is_ts;
+
+  AYChipStruct chip0;
+  AYChipStruct chip1;
+};
+
+struct AYSongInfo AYInfo;
+
+void ay_resetay(AYSongInfo* info, int chipnum)
+{
+  if (!chipnum) ay_init(&info->chip0); else ay_init(&info->chip1);
+}
+
+void ay_writeay(AYSongInfo* info, int reg, int val, int chipnum)
+{
+  if (!chipnum) ay_out(&info->chip0, reg, val); else ay_out(&info->chip1, reg, val);
+}
+
+// PT3Play.h - begin
 //Pro tracker 3.x player was written by S.V. Bulba.
 //modified code from libayfly
 
@@ -685,3 +1053,87 @@ void PT3_Play(AYSongInfo &info)
     if(info.is_ts)
         PT3_Play_Chip(info, 1);
 }
+
+// PT3Play.h - end
+
+
+uint32_t emulate_sample(void)
+{
+  uint32_t out_l, out_r;
+
+  if (interruptCnt++ >= (SAMPLE_RATE / FRAME_RATE))
+  {
+    PT3_Play(AYInfo);
+    interruptCnt = 0;
+  }
+
+  ay_tick(&AYInfo.chip0, (AY_CLOCK / SAMPLE_RATE / 8));
+
+  out_l = AYInfo.chip0.out[0] + AYInfo.chip0.out[1] / 2;
+  out_r = AYInfo.chip0.out[2] + AYInfo.chip0.out[1] / 2;
+
+  if (AYInfo.is_ts)
+  {
+    ay_tick(&AYInfo.chip1, (AY_CLOCK / SAMPLE_RATE / 8));
+
+    out_l += AYInfo.chip1.out[0] + AYInfo.chip1.out[1] / 2;
+    out_r += AYInfo.chip1.out[2] + AYInfo.chip1.out[1] / 2;
+  }
+
+  if (out_l > 32767) out_l = 32767;
+  if (out_r > 32767) out_r = 32767;
+
+  return out_l | (out_r << 16);
+}
+
+void pt3_init(){
+  memset(&AYInfo, 0, sizeof(AYInfo));
+
+  ay_init(&AYInfo.chip0);
+  ay_init(&AYInfo.chip1);
+
+  AYInfo.module = (unsigned char*)music_data;
+  AYInfo.module_len = music_data_size;
+
+  PT3_Init(AYInfo);
+}
+
+
+uint32_t pt3_play_16() {
+	return emulate_sample();
+}
+
+uint32_t pt3_play_16_mono() {
+	uint32_t out = pt3_play_16();
+	return ((out & 0xffff)) + ((out & 0xffff0000) >> 16); //convert to 16-bit mono
+}
+
+uint32_t pt3_play() {
+	uint32_t out = pt3_play_16();
+	return ((out & 0xff00) >> 8) + ((out & 0xff000000) >> 24); //convert to 8-bit mono
+}
+
+
+#if 0
+int main() {
+	pt3_init();
+
+	FILE *fp = fopen("out_shiru_cpp.wav", "wb");
+	uint32_t samples = 44100 * 60;
+	for (uint32_t t = 0; t < samples; t++) {
+		//uint32_t amp = pt3_play_16();
+
+		uint32_t amp = emulate_sample();
+
+		if (t == 0) {
+			int hdr[] = { 1179011410, 36, 1163280727, 544501094, 16, 131073, 44100, 176400, 1048580, 1635017060, 0 };
+			hdr[1] = samples * sizeof(amp) + 15;
+			hdr[10] = samples * sizeof(amp);
+			fwrite(hdr, 1, sizeof(hdr), fp);
+		}
+		fwrite(&amp, 1, sizeof(amp), fp);
+	}
+	fclose(fp);
+}
+#endif
+
