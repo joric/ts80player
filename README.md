@@ -1,6 +1,6 @@
 # TS80player
 
-Audio player for the TS80 soldering iron
+Please read project wiki: https://github.com/joric/ts80player/wiki
 
 ## Video
 
@@ -20,8 +20,8 @@ There's no firmware backup, just revert to the official firmware the same way.
 * MMA8652FC (3-Axis, 12-bit Digital Accelerometer)
 * SSD1306 (White 96x16 OLED Display)
 
-Name    |TS100 | TS80
---------|:----:|:----:
+Pin Name|TS100 | TS80
+:-------|:----:|:----:
 KEY_A   |  A9  |  B1
 KEY_B   |  A6  |  B0
 PWM_OUT |  B4  |  A6
@@ -44,11 +44,7 @@ Stock TS80 firmware works as well.
 
 ![](https://i.imgur.com/1jMHb4J.jpg)
 
-## Documentation
-
-* https://github.com/joric/ts80player/wiki
-
 ## References
-* https://imgur.com/a/xO4b91r (Picture gallery)
+* https://github.com/joric/ts80player/wiki
 * https://github.com/joric/ts100tris
 * https://github.com/joric/es120tris
