@@ -6,6 +6,8 @@
  Upload method: "Maple DFU Bootloader 2.0"
  Edit %LOCALAPPDATA%\Arduino15\packages\STM32\hardware\stm32\1.9.0\platform.txt:
  build.preferred_out_format=hex
+ Edit %LOCALAPPDATA%\Arduino15\packages\STM32\hardware\stm32\1.9.0\boards.txt:
+ GenF1.menu.upload_method.dfu2Method.build.flash_offset=0x4000
  Use Sketch->Export Compiled binary to save hex in the sketch folder
  Upload via DFU bootloader, make sure it renames to RDY, power cycle the iron
 */
