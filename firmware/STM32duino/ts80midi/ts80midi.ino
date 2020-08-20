@@ -52,50 +52,75 @@ void beep(int freq, int ms) {
   }  
 }
 
-void update(int current, int total) {
+void update(int pos, int notes) {
 #if DISPLAY_ENABLED
   display.clearDisplay();
   display.setCursor(0,16);
-  display.print("Note: ");
-  display.print( current);
+  display.print("< Pos: ");
+  if (pos<10) display.print(" ");
+  if (pos<100) display.print(" ");
+  display.print(pos);
   display.print("/");
-  display.print(total);
+  display.print(notes);
+  display.print(" >");
   display.display();
 #endif
 }
 
 
-#include "bumble.h"
+#define TUNES 3
+#include "chopin.h"
 #include "bach.h"
+#include "bumble.h"
 
 const byte * data = 0;
-int pos, notes, rate;
+int pos, notes, rate, tune;
 
-void btnA() {
-  data = bumble_data;
-  notes = (sizeof(bumble_data)-2)/3;
+void select(int x) {
+  tune = (x + TUNES) % TUNES;
+  switch (tune) {
+    case 0:
+      data = chopin_data;
+      notes = (sizeof(chopin_data)-2)/3;    
+    break;    
+    case 1:
+      data = bumble_data;
+      notes = (sizeof(bumble_data)-2)/3;    
+    break;    
+    case 2:
+      data = bach_data;
+      notes = (sizeof(bach_data)-2)/3;    
+    break;
+    default:
+    break;    
+  }  
   pos = 0;
 }
 
+void btnA() {
+  select(tune+1);
+  delay(50);  
+}
+
 void btnB() {
-  data = bach_data;
-  notes = (sizeof(bach_data)-2)/3;
-  pos = 0;    
+  select(tune-1);
+  delay(50); 
 }
 
 void loop() {
   if (!data) {
-    btnA();
+    select(0);
   }
+
+  update(pos, notes);  
 
   byte w = data[pos*3+1];
   byte lo = data[pos*3+2];
   byte hi = data[pos*3+3];
 
-  int freq = 65536 * 64 / (hi * 256 + lo);
+  int freq = 65536 * 32 / (hi * 256 + lo);
   int ms = w * 5;
   beep(freq, ms);
-  update(pos, notes);
 
   pos = (pos+1) % notes;
 }
