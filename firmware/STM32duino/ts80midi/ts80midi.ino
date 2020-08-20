@@ -1,4 +1,6 @@
 #define LEDPIN     PA6 // audio output (TS80 heater pin)
+#define BUTTON_A   PB1
+#define BUTTON_B   PB0
 
 #define DISPLAY_ENABLED 1 // disable in case of ROM/RAM overflow
 
@@ -17,6 +19,11 @@ extern "C" void SystemClock_Config(void) {
 
 void setup() {
   pinMode(LEDPIN, OUTPUT);
+  pinMode(BUTTON_A, INPUT_PULLUP);
+  pinMode(BUTTON_B, INPUT_PULLUP);  
+  attachInterrupt(digitalPinToInterrupt(BUTTON_A), btnA, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_B), btnB, FALLING);
+  
 #if DISPLAY_ENABLED
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
@@ -58,21 +65,37 @@ void update(int current, int total) {
 }
 
 
-
-//#include "bumble.h"
+#include "bumble.h"
 #include "bach.h"
 
+const byte * data = 0;
+int pos, notes, rate;
+
+void btnA() {
+  data = bumble_data;
+  notes = (sizeof(bumble_data)-2)/3;
+  pos = 0;
+}
+
+void btnB() {
+  data = bach_data;
+  notes = (sizeof(bach_data)-2)/3;
+  pos = 0;    
+}
+
 void loop() {
-  const byte * p = bach_data;
-  int notes = (sizeof(bach_data)-2)/3;
-  byte rate = *p++;
-  for (int i=0; *p; i++) {
-      byte w = *p++;
-      byte l = *p++;
-      byte h = *p++;
-      int freq = 65536 * 128 / (h * 256 + l);
-      int ms = w * 3;
-      beep(freq, ms);
-      update(i, notes);
+  if (!data) {
+    btnA();
   }
+
+  byte w = data[pos*3+1];
+  byte lo = data[pos*3+2];
+  byte hi = data[pos*3+3];
+
+  int freq = 65536 * 64 / (hi * 256 + lo);
+  int ms = w * 5;
+  beep(freq, ms);
+  update(pos, notes);
+
+  pos = (pos+1) % notes;
 }
