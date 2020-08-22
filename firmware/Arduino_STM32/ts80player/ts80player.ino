@@ -1,41 +1,3 @@
-/*
-
-  Sigma Delta DAC example using DMA and double buffering
-
-  Generate a sine wave, fill a buffer and play the samples in a timer driven interrupt routine.
-
-  Hardware: Poti on analog input 0
-  Library dependency: you need the libmaple hardware timer
-  http://docs.leaflabs.com/docs.leaflabs.com/index.html  
-
-  This is just an experiment using a buffer filled with the sigmal delta principle
-  and output it by the DMA to port PB0.
-
-  The DMA is programmed bare metal without any wrapper functions.
-
-  https://github.com/ChrisMicro/BluePillSound
-
-  ************************************************************************
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
-
-  ********************* list of outhors **********************************
-
-  v0.1  4.4.2017  C. -H-A-B-E-R-E-R-  initial version
-  v0.2  5.4.2017  C. -H-A-B-E-R-E-R-  higher sampling rate due to 32bit table
-  v0.3  6.4.2017  C. -H-A-B-E-R-E-R-  interrupt driven sine wave oscillator
-  v0.3 18.4.2017  C. -H-A-B-E-R-E-R-  buffered player
-
-  It is mandatory to keep the list of authors in this code.
-  Please add your name if you improve/extend something
-
-  modified by joric for the ts80player project
-  https://github.com/joric/ts80player/
-*/
-
 #include "stm32f103.h"
 
 #define DISPLAY_ENABLED 1 // disable in case of ROM/RAM overflow
@@ -46,10 +8,11 @@
 #define OLED_I2C_ADDR 0x3C
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 32
-Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire);
+#define OLED_RESET -1
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET);
 #endif
 
-#define DACSAMPLINGRATE_HZ    32000 // worked as 32000 with buffer 64
+#define DACSAMPLINGRATE_HZ    16000 // worked as 32000 with buffer 64 (nucleo needs 16000)
 #define TIMER_INTTERUPT_US    1000000UL / DACSAMPLINGRATE_HZ    
 
 HardwareTimer timer(2);
@@ -58,13 +21,12 @@ HardwareTimer timer(2);
 
 volatile uint32_t DmaBuffer[DMABUFFERLENGTH];
 
-
 #define PWM_FREQ (DACSAMPLINGRATE_HZ)
 //#define FATAL_PT3 1
 //#define APPLE_PT3 1 // 6-channel, super slow
 //#include "pt3_play_shiru_cpp.h" // legacy C++ player for testing
 #include "pt3_play_shiru.h" // plain C player
-//#include "pt3_play_zxssk.h" // way too slow (max ~16khz)
+//#include "pt3_play_zxssk.h" // best quality but way too slow (max ~16khz)
 
 
 // good DMA article:
@@ -107,6 +69,9 @@ void startTimer()
 #define PIN_PA 6                  // speaker pin, you can choose 0..7, 0 means PB0, 1 means PB1 ...
 #define PORTA_PINMASK (1<<PIN_PA)
 
+#define PIN_OLED_RST 15
+#define OLED_RST_PINMASK (1<<PIN_OLED_RST)
+
 #define FAST_DELTA_SIGMA 1
 
 #if FAST_DELTA_SIGMA
@@ -126,7 +91,34 @@ void writeDac( uint32_t sollwert )
   {
     integrator += sollwert - oldValue;
     oldValue = integrator & 0b11100000000;
+
+    // trying to prevent TS80 OLED reset via PA15
+    // sound pin: PA6, mask: 1<<6 = 0x40 
+    // OLED reset PA15, mask: 1<<15 = 0x8000
+
+    // 0x00008000 does reset OLED, sound present
+    // 0x00000040 does reset OLED, no sound    
+    // 0xffffffff does not reset OLED
+    // 0x0000ffff does reset OLED
+    // 0xffff0000 does reset OLED
+    // 0x000000ff does reset OLED
+    // 0xfffffff0 does not (no sound)
+    // 0xffffff00 does not (no sound)
+    // 0xfffff000 does not (no sound)
+    // 0xffff0000 does reset (no sound)
+    // 0x00ffff00 does reset (no sound)
+    // 0x0ffffff0 does not (no sound)
+    // 0xff0000ff does reset (no sound)
+    // 0xffff0fff does not (no sound)
+    // 0xffffe000 does not (no sound)
+    // 0xffff8000 does not (no sound)
+    // 0xff000000 does reset (no sound)
+
+    // I don't know what the hell is going on so far
+
     DmaBuffer[n] = CoarseSigmaDeltaTable[ oldValue >> 8 ];
+
+    //DmaBuffer[n] = 0xffff8000  | CoarseSigmaDeltaTable[ oldValue >> 8 ];
   }
 }
 
@@ -140,6 +132,8 @@ void writeDac( uint32_t sollwert )
   static uint32_t  oldValue = 0;
 
   uint32_t n;
+
+  // NO SOUND HERE AT ALL
   
   // sigma delta DAC, hold the DAC value for n-steps constant
   for (n = 0; n < DMABUFFERLENGTH; n++)
@@ -148,12 +142,12 @@ void writeDac( uint32_t sollwert )
     if (integrator > 0)
     {
       oldValue = MAXVALUE;
-      DmaBuffer[n]=PORTA_PINMASK;
+      DmaBuffer[n] = 0xff ^ PORTA_PINMASK;
     }
     else
     {
       oldValue = 0;
-      DmaBuffer[n]=0;
+      DmaBuffer[n] = 0xff;
     }
   }
 }
@@ -181,53 +175,13 @@ void DACsampleRateHandler()
   }
  
 }
-#define LEDPIN     PC13 // Blue Pill LED
-#define INITLED    pinMode(LEDPIN, OUTPUT)
-
-#define LEDON      digitalWrite(LEDPIN, HIGH)
-#define LEDOFF     digitalWrite(LEDPIN, LOW)
-
-void toggleLed()
-{
-  static uint8_t flag=0;
-
-  if(flag) LEDON;
-  else     LEDOFF;
-
-  flag^=1;
-}
 
 volatile buf_t * volatile SoundBuffer;
 
 void setup()
 {
   uint32_t n;
-
   pt3_init();
-  
-  pinMode(PC13, OUTPUT);
-  pinMode(SPEAKERPIN, OUTPUT); 
-  Serial.begin(115200);
-  Serial.println("SPI SIGMA DELTA SOUND calculation performance");
-
-  delay(100);
-  SoundBufferCurrentlyPlaying = SoundBuffer0;
-  SoundBuffer                 = SoundBuffer1;
-  startDMA();
-
-  // ** just check the write speed **
-  uint32_t startTime = micros();
-  for (n = 0; n < 1000; n++) writeDac(0); // dummy write silence
-  uint32_t stopTime = micros();
-
-  uint32_t DacSamplingFrequency;
-  Serial.print("DAC write time for 1000 samples in us: "); Serial.println(stopTime - startTime);
-  DacSamplingFrequency = 1000000UL * 1000 / (stopTime - startTime);
-  Serial.print("maximum possible DAC sampling frequency [Hz]: "); Serial.println(DacSamplingFrequency);
-
-  // *********************************
-
-  startTimer();
 
 #if DISPLAY_ENABLED
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -239,6 +193,32 @@ void setup()
   display.print("Playing...");
   display.display();  
 #endif
+ 
+  pinMode(SPEAKERPIN, OUTPUT); 
+  //Serial.begin(115200);
+  //Serial.println("SPI SIGMA DELTA SOUND calculation performance");
+
+  delay(100);
+  SoundBufferCurrentlyPlaying = SoundBuffer0;
+  SoundBuffer                 = SoundBuffer1;
+
+  for (int i=0; i<DMABUFFERLENGTH; i++) DmaBuffer[i] = 0xffffffff; // prevents OLED reset
+  
+  startDMA();
+
+  // ** just check the write speed **
+  uint32_t startTime = micros();
+  for (n = 0; n < 1000; n++) writeDac(0xff); // dummy write silence
+  uint32_t stopTime = micros();
+
+  uint32_t DacSamplingFrequency;
+  //Serial.print("DAC write time for 1000 samples in us: "); Serial.println(stopTime - startTime);
+  DacSamplingFrequency = 1000000UL * 1000 / (stopTime - startTime);
+  //Serial.print("maximum possible DAC sampling frequency [Hz]: "); Serial.println(DacSamplingFrequency);
+
+  // *********************************
+
+  startTimer();
 }
 
 volatile uint32_t Oscillator1_Frequency_Hz=440;
@@ -247,7 +227,7 @@ void updateSound()
 {
   for(uint32_t n=0;n<SOUNDBUFFERLENGTH;n++)
   { 
-    SoundBuffer[n]=pt3_play();
+    SoundBuffer[n] = pt3_play();
   }
 
 }
@@ -256,9 +236,5 @@ void loop()
 {
   SoundBuffer = SoundBufferCurrentlyPlaying; 
   while(SoundBuffer == SoundBufferCurrentlyPlaying); // wait until buffer is emtpy
-  
-  //LEDON; // debug led for processing time measuremt with oscilloscope
   updateSound();
-  //LEDOFF;
-
 }
