@@ -32,7 +32,7 @@ void setup() {
 }
 
 #define W 128
-#define H 32
+#define H 16
 #define SIZE (W*H/8)
 static int ofs = 0;
 uint8_t buf[SIZE];
@@ -45,7 +45,7 @@ void loop() {
         ofs = (ofs + 1) % SIZE;
         if (ofs == 0) {       
           display.clearDisplay();
-          display.drawBitmap(0,0, buf, W, H, 1);
+          display.drawBitmap(0,16, buf, W, H, 1);
           //display.setCursor(0,16);
           //display.print(frame);
           display.display();         
