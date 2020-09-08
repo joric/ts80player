@@ -3,15 +3,18 @@
 import cv2 # pip install opencv-python
 import serial
 import time
+from PIL import Image
+import itertools
 
 fname = 'bad_apple_96x16.mp4'
-#fname = 'C:/Downloads/Doom 2 1.9 Demo Loop - Attract Mode - HD.mp4'
+fname = 'doom_128x64.mp4'
 #fname = 'C:/Videos/bad_apple/bad_apple_hd_widescreen.mp4'
 
 cap = cv2.VideoCapture(fname)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
 frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+frame = 0
 
 try:
     s = serial.Serial('COM18')
@@ -19,44 +22,26 @@ except Exception as e:
     s = None
     print(e)
 
+def collect(bits):
+    return [sum([(1 if byte[i] else 0)<<(7-i) for i in range(0,8)]) for byte in zip(*(iter(bits),) * 8)]
+
 def convert(im):
-    im = cv2.resize(im, (96, 16))
-    grey_im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-    im = cv2.threshold(im, 127, 255, cv2.THRESH_BINARY)[1]
-    h = im.shape[0]
-    w = im.shape[1]
-    byte = 0
-    buf = []
-    shift = 0
-    lines = h//8
-    for i in range(lines):
-        for y in range(i*8, i*8+8):
-            for x in range(w):
-                bit = 1 if any(im[y,x]) else 0
-                byte |= bit << (7-shift)
-                shift += 1
-                if shift==8:
-                    shift = 0
-                    buf.append(byte)
-                    byte = 0
-            buf.extend([0]*((128-w)//8))
-    return buf
+    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    im = Image.fromarray(im)
+    im = im.resize((96,16), Image.ANTIALIAS)
+    im = im.convert(mode='1', dither=Image.FLOYDSTEINBERG)
+    #im.save("images/%d.png" % frame, "png")
+    return collect(im.getdata())
 
-count = 0
-prev = 0
-
+start = time.time()
 while True:
-    time_elapsed = time.time() - prev
-    if time_elapsed > 1./fps:
-        prev = time.time()
-        res, im = cap.read()
-        if not res: break
+    if time.time() >= start + frame * 1./fps:
+        ret, im = cap.read()
+        if not ret:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
+
         buf = convert(im)
         if s: s.write(buf)
-        print ("frame", count, "of", frames, "at", fps, "fps", end='\r')
-        count += 1
-
-
-
-
-
+        print ("frame", frame, "of", frames, "at", fps, "fps", end='\r')
+        frame += 1

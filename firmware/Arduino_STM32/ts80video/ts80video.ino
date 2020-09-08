@@ -31,7 +31,7 @@ void setup() {
 #endif  
 }
 
-#define W 128
+#define W 96
 #define H 16
 #define SIZE (W*H/8)
 static int ofs = 0;
