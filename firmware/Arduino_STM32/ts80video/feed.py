@@ -40,6 +40,10 @@ def convert(im, frame):
 def main(video):
 
     port = find_serial()
+    if not port:
+        print("Serial port not found")
+        return
+
     print("Opening port", port)
     s = serial.Serial(port)
 
