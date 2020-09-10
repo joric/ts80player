@@ -8,6 +8,8 @@ from PIL import ImageGrab
 from PIL import ImageFilter
 import itertools
 
+frame = 0
+frames = 0
 fps = 30
 
 try:
@@ -32,5 +34,5 @@ while True:
         im = ImageGrab.grab(bbox=(0,0,1920,1080))
         buf = convert(im)
         if s: s.write(buf)
-        print ("frame", frame, "of", frames, "at", fps, "fps", end='\r')
+        print ("frame", frame, "at", fps, "fps", end='\r')
         frame += 1
