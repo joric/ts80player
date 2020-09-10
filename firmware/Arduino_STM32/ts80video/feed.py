@@ -5,7 +5,7 @@ import serial
 import time
 import sys
 import itertools
-from PIL import Image, ImageGrab, ImageFilter
+from PIL import Image, ImageOps, ImageGrab, ImageFilter
 
 def find_serial():
     import serial.tools.list_ports
@@ -19,6 +19,9 @@ def collect(bits):
 
 def convert(im):
     im = im.resize((96,16), Image.ANTIALIAS)
+    #im = ImageOps.posterize(im, bits=4)
+    #im = im.filter(ImageFilter.FIND_EDGES)
+    #im = im.convert(mode='1', dither=Image.NONE)
     im = im.convert(mode='1', dither=Image.FLOYDSTEINBERG)
     #im.save("images/%d.png" % frame, "png")
     return collect(im.getdata())
