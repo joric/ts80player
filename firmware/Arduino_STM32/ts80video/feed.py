@@ -28,7 +28,7 @@ def convert(im, frame):
     enhancer = ImageEnhance.Contrast(im)
     im = enhancer.enhance(1.75)
 
-    im.save("images/%04d.png" % frame, "png")
+    #im.save("images/%04d.png" % frame, "png")
 
     #im = im.filter(ImageFilter.FIND_EDGES)
 
