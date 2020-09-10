@@ -5,7 +5,7 @@ import serial
 import time
 import sys
 import itertools
-from PIL import Image, ImageOps, ImageGrab, ImageFilter
+from PIL import Image, ImageOps, ImageGrab, ImageFilter, ImageEnhance
 
 def find_serial():
     import serial.tools.list_ports
@@ -17,13 +17,24 @@ def find_serial():
 def collect(bits):
     return [sum([(1 if byte[i] else 0)<<(7-i) for i in range(0,8)]) for byte in zip(*(iter(bits),) * 8)]
 
-def convert(im):
+def convert(im, frame):
     im = im.resize((96,16), Image.ANTIALIAS)
-    #im = ImageOps.posterize(im, bits=4)
+    im = im.convert('L')
+    im = ImageOps.posterize(im, bits=3)
+
+    enhancer = ImageEnhance.Brightness(im)
+    im = enhancer.enhance(1.5)
+
+    enhancer = ImageEnhance.Contrast(im)
+    im = enhancer.enhance(1.75)
+
+    im.save("images/%04d.png" % frame, "png")
+
     #im = im.filter(ImageFilter.FIND_EDGES)
+
     #im = im.convert(mode='1', dither=Image.NONE)
     im = im.convert(mode='1', dither=Image.FLOYDSTEINBERG)
-    #im.save("images/%d.png" % frame, "png")
+
     return collect(im.getdata())
 
 def main(video):
@@ -65,7 +76,7 @@ def main(video):
             else:
                 im = ImageGrab.grab() # grab from screen
 
-            buf = convert(im)
+            buf = convert(im, frame)
 
             if s: s.write(buf)
             print ("frame", frame, "of", frames, "at", fps, "fps", end='\r')
